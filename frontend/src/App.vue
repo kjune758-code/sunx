@@ -1,0 +1,2 @@
+<template><header><strong>QUANT / LAB</strong><span>SIMULATION ONLY</span></header><div class="layout"><nav><RouterLink v-for="item in links" :key="item[0]" :to="item[0]">{{item[1]}}</RouterLink><p>港股 · 美股<br>人工确认 · 无真实下单</p></nav><main><RouterView/></main></div></template>
+<script setup>const links=[['/','总览'],['/stocks','股票池'],['/strategies','策略'],['/backtest','回测'],['/signals','交易信号'],['/positions','持仓']];</script>

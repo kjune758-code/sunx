@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>港股量化工作台</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef2f7;color:#172438;font:15px/1.6 "Microsoft YaHei",sans-serif}main{max-width:1040px;margin:auto;padding:48px 24px}header{border-bottom:1px solid #cdd6e2;padding-bottom:24px}h1{font-size:36px;margin:8px 0}h2{font-size:18px;margin:0 0 16px}p{margin:0;color:#526175}.tag{background:#dceafc;color:#174b86;padding:4px 10px;border-radius:5px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0}.card{background:white;border:1px solid #dce3ed;border-radius:12px;padding:22px;margin-bottom:16px}.grid .card{margin:0}.value{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}label{display:block;margin:8px 0}input,button{font:inherit;padding:8px 12px;border-radius:6px;border:1px solid #adbbce}input{width:130px}button{background:#164e87;color:white;cursor:pointer}button.secondary{background:white;color:#164e87}button:disabled{opacity:.55;cursor:default}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:9px 5px;border-bottom:1px solid #e3e9f0}small{color:#526175}#notice{margin-top:10px;min-height:24px}svg{width:100%;height:112px;display:block;margin:12px 0}@media(max-width:640px){main{padding:24px 14px}.grid{grid-template-columns:1fr}.card{padding:16px}h1{font-size:28px}}
+</style>
+<main>
+<header><span class="tag">模拟环境 · 港股日线</span><h1>港股量化工作台</h1><p>查看策略信号、模拟成交并记录结果。行情为演示数据。</p></header>
+<div class="grid">
+<section class="card"><h2>可用资金</h2><div class="value" id="cash"></div><small>初始模拟资金 HK$100,000</small></section>
+<section class="card"><h2>模拟持仓</h2><div class="value" id="position"></div><small>腾讯控股 · 00700</small></section>
+</div>
+<div class="grid">
+<section class="card"><h2>腾讯控股 <small>00700 · 1D</small></h2><p>演示收盘价 HK$400.00</p>
+<svg viewBox="0 0 320 110" role="img" aria-label="演示收盘价走势" preserveAspectRatio="none"><path d="M0 30H320 M0 60H320 M0 90H320" stroke="#e3e9f0"/><polyline points="0,88 32,76 64,82 96,66 128,71 160,55 192,62 224,36 256,44 288,21 320,14" fill="none" stroke="#1a679a" stroke-width="3"/></svg>
+<p id="signal"></p></section>
+<section class="card"><h2>操作清单</h2><p id="status"></p>
+<form id="order"><label>成交价 HK$ <input id="price" type="number" min="0.01" step="0.01" value="400" required></label>
+<label>数量（股） <input id="qty" type="number" min="100" step="100" max="1000000" value="100" required></label>
+<small>演示规则：每手 100 股，按成交金额收取 0.1% 模拟费用。</small><div style="margin-top:12px"><button id="confirm">确认模拟成交</button> <button class="secondary" id="skip" type="button">跳过</button></div></form>
+<p id="notice" role="status"></p><button id="next" class="secondary" hidden>生成下一条演示信号</button></section>
+</div>
+<section class="card"><h2>操作记录</h2><table><thead><tr><th>信号</th><th>结果</th><th>数量</th><th>成交价</th><th>费用</th></tr></thead><tbody id="ledger"></tbody></table></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const key = 'quant-workbench-demo-v1';
+const money = cents => 'HK$' + (cents / 100).toLocaleString('en-HK', {minimumFractionDigits:2,maximumFractionDigits:2});
+const state = {cash:10000000, shares:0, id:1, done:false, rows:[]};
+try { Object.assign(state, JSON.parse(localStorage.getItem(key))); } catch {}
+const selling = () => state.shares > 0;
+function render() {
+  $('cash').textContent = money(state.cash);
+  $('position').textContent = state.shares + ' 股';
+  $('signal').textContent = selling() ? '退出候选 · 演示止盈条件触发' : '入场候选 · 演示均线条件触发';
+  $('status').textContent = '信号 #' + state.id + (state.done ? ' · 已处理' : ' · 待人工确认');
+  $('order').hidden = state.done;
+  $('next').hidden = !state.done;
+  $('ledger').replaceChildren();
+  for (const row of state.rows) {
+    const tr = $('ledger').insertRow();
+    for (const value of row) tr.insertCell().textContent = value;
+  }
+  if (!state.rows.length) {
+    const cell = $('ledger').insertRow().insertCell();
+    cell.colSpan = 5;
+    cell.textContent = '暂无操作';
+  }
+}
+function save(message) {
+  try { localStorage.setItem(key, JSON.stringify(state)); }
+  catch { message += '。当前浏览器无法保存记录'; }
+  render();
+  $('notice').textContent = message;
+}
+$('order').onsubmit = event => {
+  event.preventDefault();
+  if (state.done) return;
+  const qty = $('qty').valueAsNumber;
+  const price = Math.round($('price').valueAsNumber * 100);
+  const amount = price * qty;
+  if (!Number.isSafeInteger(amount) || amount <= 0 || qty % 100 !== 0) return;
+  const fee = Math.round(amount / 1000);
+  const sell = selling();
+  if (sell ? qty > state.shares || state.cash + amount - fee > Number.MAX_SAFE_INTEGER : amount + fee > state.cash) {
+    $('notice').textContent = sell ? '卖出数量超过可用持仓，或成交金额超出范围。' : '模拟资金不足，请调整数量或价格。';
+    return;
+  }
+  state.cash += sell ? amount - fee : -amount - fee;
+  state.shares += sell ? -qty : qty;
+  state.done = true;
+  state.rows.unshift([state.id, sell ? '模拟卖出' : '模拟买入', qty, money(price), money(fee)]);
+  save('已登记模拟成交');
+};
+$('skip').onclick = () => {
+  if (state.done) return;
+  state.done = true;
+  state.rows.unshift([state.id, '已跳过', '—', '—', '—']);
+  save('已跳过本条信号');
+};
+$('next').onclick = () => {
+  if (!state.done) return;
+  state.id++;
+  state.done = false;
+  $('qty').value = '100';
+  $('price').value = '400';
+  save('已生成演示信号');
+};
+render();
+</script>
+</main>
+</html>
